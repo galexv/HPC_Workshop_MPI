@@ -8,8 +8,9 @@ double fancy_exp(double x)
 {
   double c=1;
   double s=c;
+  const double thresh=2.E-16;
 
-  for (unsigned long k=1; fabs(c)>2.E-16; ++k) {
+  for (unsigned long k=1; fabs(c)>thresh; ++k) {
     c *= x/k;
     s += c;
   }
@@ -21,8 +22,9 @@ double fancy_log(double x)
 {
   double c=x-1;
   double s=c;
+  const double thresh=2.E-10;
 
-  for (unsigned long k=0; fabs(c)>2.E-10; ++k) {
+  for (unsigned long k=0; fabs(c)>thresh; ++k) {
     c *= (1-x)*(k+1)/(k+2);
     s += c;
   }
@@ -70,7 +72,7 @@ int main(int argc, char** argv)
   }
   
   printf("#x0 x I(x0,x) exact diff\n");
-  double x0=0.00001;
+  double x0=1E-5;
   double x=1;
   const double y_exact=4*(pow(x,0.25)-pow(x0,0.25));
   const double y=integral(n, x0, x);
