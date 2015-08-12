@@ -121,11 +121,9 @@ void do_worker(int master, int rank)
 
 /// Master process, Returns the computed result
 double do_master(const double global_a, const double global_b,
-               const unsigned long nsteps_all,
-               const int nprocs, const int rank)
+                 const unsigned long nsteps_all, const unsigned long points_per_block,
+                 const int nprocs, const int rank)
 {
-  const unsigned long points_per_block=1000000; // adjustable
-
   const double per_step=(global_b-global_a)/nsteps_all;
   
   int nworkers_left=nprocs-1;
@@ -194,10 +192,13 @@ int main(int argc, char** argv)
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Get command line arguments, broadcast
-  unsigned long int nsteps_all;
+  unsigned long int nsteps_all, points_per_block;
   if (rank==0) {
-    if (argc!=2 || sscanf(argv[1],"%lu",&nsteps_all)!=1) {
-      fprintf(stderr,"Usage:\n%s integration_steps\n\n\n",argv[0]);
+    if (argc!=3
+        || sscanf(argv[1],"%lu",&nsteps_all)!=1
+        || sscanf(argv[2],"%lu",&points_per_block)!=1) {
+      
+      fprintf(stderr,"Usage:\n%s integration_steps points_per_block\n\n\n",argv[0]);
 
       MPI_Abort(MPI_COMM_WORLD, 1);
       return 1;
@@ -215,8 +216,6 @@ int main(int argc, char** argv)
            x, fabs(log(x)-fancy_log(x)));
   }
 
-  // MPI_Bcast(&nsteps_all, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
-
   // Global integration limits.
   const double global_a=1E-5;
   const double global_b=1;
@@ -224,7 +223,7 @@ int main(int argc, char** argv)
   // Split into workers and master:
   if (rank==0) {
     // Run as the master and get the result:
-    double y=do_master(global_a,global_b,nsteps_all,nprocs,rank);
+    double y=do_master(global_a,global_b,nsteps_all,points_per_block,nprocs,rank);
 
     const double y_exact=4*(pow(global_b,0.25)-pow(global_a,0.25));
     printf("Result=%lf Exact=%lf Difference=%lf\n", y, y_exact, y-y_exact);
