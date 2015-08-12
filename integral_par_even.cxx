@@ -60,6 +60,24 @@ double integral(const unsigned long npoints, const double x1, const double x2)
   return s;
 }
 
+
+/// Calculates the fair share of `nsteps_all` steps between `nprocs` processes for rank `rank`
+void get_steps(unsigned long nsteps_all, int nprocs, unsigned int rank,
+               unsigned long* my_stepbase, unsigned long* my_nsteps)
+{
+  const unsigned long ns_share=nsteps_all/nprocs;
+  const unsigned long ns_extra=nsteps_all%nprocs;
+  if (rank<ns_extra) {
+    *my_nsteps=ns_share+1;
+    *my_stepbase=(ns_share+1)*rank;
+  } else {
+    *my_nsteps=ns_share;
+    *my_stepbase=(ns_share+1)*ns_extra + (rank-ns_extra)*ns_share;
+  }
+  return;
+}
+
+
 int main(int argc, char** argv)
 {
   MPI_Init(&argc, &argv);
@@ -69,10 +87,10 @@ int main(int argc, char** argv)
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
   // Get command line arguments, broadcast
-  unsigned long int nsteps;
+  unsigned long int nsteps_all;
   if (rank==0) {
-    if (argc!=2 || sscanf(argv[1],"%lu",&nsteps)!=1) {
-      fprintf(stderr,"Usage: %s integration_steps_per_proc\n",argv[0]);
+    if (argc!=2 || sscanf(argv[1],"%lu",&nsteps_all)!=1) {
+      fprintf(stderr,"Usage:\n%s integration_steps\n\n\n",argv[0]);
 
       MPI_Abort(MPI_COMM_WORLD, 1);
       return 1;
@@ -83,22 +101,25 @@ int main(int argc, char** argv)
     printf("Sanity check: logarithm accuracy at %lf is %lf\n",
            x, fabs(log(x)-fancy_log(x)));
   }
-  MPI_Bcast(&nsteps, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&nsteps_all, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
   // Global integration limits.
   const double global_a=1E-5;
   const double global_b=1;
   
   // Each rank figures out its integration limits and number of steps
-  const double range=(global_b-global_a)/nprocs;
-  const double x1=global_a + rank*range;
-  const double x2=global_a + (rank+1)*range;
+  unsigned long my_stepbase, my_nsteps; // my steps are my_stepbase,my_stepbase+1,...,my_stepbase+my_nsteps-1
+  get_steps(nsteps_all, nprocs, rank,  &my_stepbase, &my_nsteps);
+  
+  const double per_step=(global_b-global_a)/nsteps_all;
+  const double x1=global_a + my_stepbase*per_step;
+  const double x2=x1 + my_nsteps*per_step;
 
   fprintf(stderr,"DEBUG: Rank %u: %lu steps from %lf to %lf\n",
-                         rank, nsteps, x1, x2);
+                         rank, my_nsteps, x1, x2);
 
   // Compute my own part of the integral
-  double my_y=integral(nsteps, x1, x2);
+  double my_y=integral(my_nsteps, x1, x2);
   fprintf(stderr,"DEBUG: Rank %u: done, result=%lf\n",
                  rank, my_y);
 
