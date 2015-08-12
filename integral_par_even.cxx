@@ -115,13 +115,11 @@ int main(int argc, char** argv)
   const double x1=global_a + my_stepbase*per_step;
   const double x2=x1 + my_nsteps*per_step;
 
-  fprintf(stderr,"DEBUG: Rank %u: %lu steps from %lf to %lf\n",
-                         rank, my_nsteps, x1, x2);
+  // fprintf(stderr,"DEBUG: Rank %u: %lu steps from %lf to %lf\n", rank, my_nsteps, x1, x2);
 
   // Compute my own part of the integral
   double my_y=integral(my_nsteps, x1, x2);
-  fprintf(stderr,"DEBUG: Rank %u: done, result=%lf\n",
-                 rank, my_y);
+  // fprintf(stderr,"DEBUG: Rank %u: done, result=%lf\n", rank, my_y);
 
   // Sum all numbers on master
   double y=0;

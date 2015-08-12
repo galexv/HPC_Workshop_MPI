@@ -97,7 +97,7 @@ void do_worker(int master, int rank)
     case TAG_GO:
       break; // do normal work
     case TAG_STOP:
-      fprintf(stderr,"DEBUG: Rank %d: Got TAG_STOP.\n",rank);
+      // fprintf(stderr,"DEBUG: Rank %d: Got TAG_STOP.\n",rank);
       return;
     default:
       fprintf(stderr,"Rank %d: Got unexpected tag=%d, aborting.\n",rank,stat.MPI_TAG);
@@ -107,12 +107,10 @@ void do_worker(int master, int rank)
     const double x1=range_data[0];
     const double x2=range_data[1];
     const unsigned long my_nsteps=range_data[2];
-    fprintf(stderr,"DEBUG: Rank %u: %lu steps from %lf to %lf\n",
-                   rank, my_nsteps, x1, x2);
+    // fprintf(stderr,"DEBUG: Rank %u: %lu steps from %lf to %lf\n", rank, my_nsteps, x1, x2);
     // Compute my own part of the integral
     double my_y=integral(my_nsteps, x1, x2);
-    fprintf(stderr,"DEBUG: Rank %u: done, result=%lf\n",
-                   rank, my_y);
+    // fprintf(stderr,"DEBUG: Rank %u: done, result=%lf\n", rank, my_y);
 
     // Send the result to master
     MPI_Send(&my_y,1,MPI_DOUBLE, master, TAG_DONE, MPI_COMM_WORLD);
@@ -130,7 +128,7 @@ double do_master(const double global_a, const double global_b,
   unsigned long ipoint=0; // next point to be processed
   double y=0;
   for (;;) {
-    fprintf(stderr,"DEBUG: waiting for a message from a worker...\n");
+    // fprintf(stderr,"DEBUG: waiting for a message from a worker...\n");
     
     // Get a tagged message and possibly a result from any worker
     double y_worker=0;
@@ -142,7 +140,7 @@ double do_master(const double global_a, const double global_b,
       // Do we have any work for this worker?
       if (ipoint>=nsteps_all) {
         // if not, stop the worker
-        fprintf(stderr,"DEBUG: Stopping worker %d\n",rank_worker);
+        // fprintf(stderr,"DEBUG: Stopping worker %d\n",rank_worker);
         MPI_Send(NULL,0,MPI_DOUBLE, rank_worker, TAG_STOP, MPI_COMM_WORLD);
         --nworkers_left;
         break;
@@ -164,7 +162,7 @@ double do_master(const double global_a, const double global_b,
       break;
 
     case TAG_DONE:
-      fprintf(stderr,"DEBUG: Received result from rank %d: %lf\n", rank_worker, y_worker);
+      // fprintf(stderr,"DEBUG: Received result from rank %d: %lf\n", rank_worker, y_worker);
       y += y_worker;
       break;
 
@@ -175,7 +173,7 @@ double do_master(const double global_a, const double global_b,
 
     // Any active workers left?
     if (nworkers_left<=0) {
-      fprintf(stderr,"DEBUG: No more workers left, exiting the loop.\n");
+      // fprintf(stderr,"DEBUG: No more workers left, exiting the loop.\n");
       return y;
     }
   }
