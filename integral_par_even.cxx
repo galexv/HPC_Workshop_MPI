@@ -131,6 +131,9 @@ int main(int argc, char** argv)
     printf("Result=%lf Exact=%lf Difference=%lf\n", y, y_exact, y-y_exact);
   }
 
+  MPI_Barrier(MPI_COMM_WORLD);
+  // Here we could start another computation.
+  
   MPI_Finalize();
   return 0;
 }
