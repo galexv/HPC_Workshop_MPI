@@ -1,0 +1,106 @@
+<[autotemplate]
+title={MPI profiling with Allinea MAP}
+author={Alexander Gaenko}
+usetheme={Frankfurt}
+usecolortheme={whale}
+lstloadlanguages={sh,C++}
+lstset={escapeinside={\#(}{)},style=basic,basicstyle=\small\ttfamily,basewidth=0.5em}
+definecolor={babyblue}{rgb}{0.54, 0.81, 0.94}
+definecolor={ballblue}{rgb}{0.13, 0.67, 0.8}
+[autotemplate]>
+
+
+==== The problem and the first approach ====
+
+$$ I(a,b) = \int_a^b x^{-3/4} dx $$
+
+Analytic solution to cross-check: $ I(a,b) = 4(b^{1/4} - a^{1/4}) $
+
+<[columns]
+[[[0.5\textwidth]]]
+<<<integrand-edited.pdf,height=0.5\textheight>>>
+[[[0.5\textwidth]]]
+* Split $[a,b]$ equally between workers
+* { $ I(a,b) = \sum_{k} I(x_{k},x_{k+1}) $ }
+
+[columns]>
+
+==== How to prepare your program? ====
+
+* Compile with debugging symbols ON.
+* Load Allinea DDT module
+* Run with $map$
+
+<[code][language=sh,emph={g},emphstyle=\color{blue},basicstyle=\small\ttfamily]
+\[me@flux\]$ mpicc -g myprogram.c -o myprogram
+
+\[me@flux\]$ module load ddt/5.0
+
+\[me@flux\]$ cd $PBS_O_WORKDIR
+
+\[me@flux\]$ export ALLINEA_SAMPLER_INTERVAL=5
+
+\[me@flux\]$ map
+
+# Or fast-track...
+
+\[me@flux\]$ map mpiexec -n 12 ./myprogram arg1 arg2 ...
+[code]>
+
+==== If you submitting to queue... ====
+Load the file @flux.qtf@ as queue configuration:
+
+<[code][language=sh,emph={support_flux},emphstyle=\color{blue},basicstyle=\small\ttfamily]
+#PBS -l walltime=WALL_CLOCK_LIMIT_TAG, \
+     nodes=NUM_NODES_TAG:ppn=PROCS_PER_NODE_TAG
+#PBS -q QUEUE_TAG -l qos=flux -A support_flux
+#PBS -V
+#PBS -o PROGRAM_TAG-allinea.stdout
+#PBS -e PROGRAM_TAG-allinea.stderr
+
+cd $PBS_O_WORKDIR
+AUTO_LAUNCH_TAG
+[code]>
+
+==== The problem and the first approach ====
+
+$$ I(a,b) = \int_a^b x^{-3/4} dx $$
+
+Analytic solution to cross-check: $ I(a,b) = 4(b^{1/4} - a^{1/4}) $
+
+<[columns]
+[[[0.5\textwidth]]]
+<<<integrand-edited.pdf,height=0.5\textheight>>>
+[[[0.5\textwidth]]]
+* Split $[a,b]$ equally between workers
+* { $ I(a,b) = \sum_{k} I(x_{k},x_{k+1}) $ }
+*<2> Caveat: integrand takes more time to compute at low $x$\!
+[columns]>
+
+==== Possible solutions ====
+
+* Allocate smaller intervals to ranks near $x=0$ \\ Try it!
+* Implement dynamic load balancing
+
+==== Dynamic load balancing ====
+\centering{Master-workers approach:}
+-- 1\baselineskip --
+<[columns]
+[[[0.5\textwidth]]]
+\centering{Master}
+# Listen to all workers
+# Worker sent @READY@ ?\\ send @GO@ with a job chunk
+# Worker sent @DONE@? \\ add result to the sum
+# No more chunks? \\ send @STOP@ to the worker
+# No more workers? \\ we are done
+[[[0.5\textwidth]]]
+\centering{Worker}
+# Listen to the master
+# Master sent @GO@ ?\\ Get job chunk \\ Run the calculation \\ Send @READY@ to master
+# Master sent @STOP@? \\ exit.
+-- 2\baselineskip --
+[columns]>
+
+==== Dynamic load balancing ====
+Try various chunk sizes, various number of processes. \\
+Where are the bottlenecks?
