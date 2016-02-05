@@ -1,0 +1,8 @@
+*.aux
+*.out
+*.log
+*.snm
+*.toc
+*.nav
+talk.tex
+*~
