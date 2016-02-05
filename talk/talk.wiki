@@ -4,63 +4,223 @@ author={Alexander Gaenko}
 usetheme={Frankfurt}
 usecolortheme={whale}
 lstloadlanguages={sh,C++}
-lstset={escapeinside={\#(}{)},style=basic,basicstyle=\small\ttfamily,basewidth=0.5em}
 definecolor={babyblue}{rgb}{0.54, 0.81, 0.94}
 definecolor={ballblue}{rgb}{0.13, 0.67, 0.8}
+definecolor={otherblue}{RGB}{120,100,255}
+lstset={escapeinside={\#(}{)},style=basic,emphstyle=\color{otherblue},basicstyle=\small\ttfamily,basewidth=0.5em}
 [autotemplate]>
 
-
-==== The problem and the first approach ====
-
-$$ I(a,b) = \int_a^b x^{-3/4} dx $$
-
-Analytic solution to cross-check: $ I(a,b) = 4(b^{1/4} - a^{1/4}) $
+==== Problem: Calculation of a definite integral.  ====
 
 <[columns]
-[[[0.5\textwidth]]]
-<<<integrand-edited.pdf,height=0.5\textheight>>>
-[[[0.5\textwidth]]]
-* Split $[a,b]$ equally between workers
-* { $ I(a,b) = \sum_{k} I(x_{k},x_{k+1}) $ }
+[[[0.25\textwidth]]]
+<<<integrand-labelled.pdf,height=0.9\textheight>>>
+[[[0.75\textwidth]]]
+The problem:
+* We need to compute: \\ $ \displaystyle F(a,b) = \int_a^b f(x) dx $ \\ Where $ f(x) $ is some (presumably\\ ``slow to compute'') function.\\[2\baselineskip]
+* We use this approach:
+*# Split $[a,b]$ by points {$\{x_{1}, x_{2}, \ldots, x_{k}\}$}
+*# $ \displaystyle F(a,b) = \sum_{k} f(\frac{x_{k}+x_{k+1}}{2}) (x_{k+1}-x_{k}) $
 
 [columns]>
 
-==== How to prepare your program? ====
 
-* Compile with debugging symbols ON.
-* Load Allinea DDT module
-* Run with $map$
-
-<[code][language=sh,emph={g},emphstyle=\color{blue},basicstyle=\small\ttfamily]
-\[me@flux\]$ mpicc -g myprogram.c -o myprogram
-
-\[me@flux\]$ module load ddt/5.0
-
-\[me@flux\]$ cd $PBS_O_WORKDIR
-
-\[me@flux\]$ export ALLINEA_SAMPLER_INTERVAL=5
-
-\[me@flux\]$ map
-
-# Or fast-track...
-
-\[me@flux\]$ map mpiexec -n 12 ./myprogram arg1 arg2 ...
+==== Problem size behavior: how to measure. ====
+Do we even need to parallelize? How fast does the execution time grow with the size of the problem?
+<[code][language=sh]
+$ gcc -O3 -o integral_seq.x integral_seq.cxx -L./mylib -lmymath
+$ time -a -p ./integral_seq.x 10000
+LOREM IPSUM LOREM IPSUM LOREM IPSUM
+LOREM IPSUM LOREM IPSUM LOREM IPSUM
+LOREM IPSUM LOREM IPSUM LOREM IPSUM
 [code]>
 
-==== If you submitting to queue... ====
-Load the file @flux.qtf@ as queue configuration:
+==== Problem size behavior. Graph. ====
+!THIS GRAPH IS WRONG!
+<<<integrand-labelled.pdf,height=0.7\textheight>>>
 
-<[code][language=sh,emph={support_flux},emphstyle=\color{blue},basicstyle=\small\ttfamily]
-#PBS -l walltime=WALL_CLOCK_LIMIT_TAG, \
-     nodes=NUM_NODES_TAG:ppn=PROCS_PER_NODE_TAG
-#PBS -q QUEUE_TAG -l qos=flux -A support_flux
+==== Parallellization: domain decomposition. ====
+
+Approach: 
+* Split $[a,b]$ into several domains;
+* Compute integrals independently.
+<[columns]
+[[[0.4\textwidth]]]
+<<<integrand-edited.pdf,height=0.5\textheight>>>
+[[[0.6\textwidth]]]
+\hspace{2em}$ \displaystyle F(a,b) = \int_a^b f(x) dx $
+# Assign a process to each \\ domain $[x_{k}, x_{k+1}]$
+# Let each process \\ compute $ F(x_{k},x_{k+1}) $
+# $ \displaystyle F(a,b) = \sum_{k} F(x_{k},x_{k+1}) $
+[columns]>
+
+==== ?? CODE ?? ====
+
+==== Parallel performance: how to measure. ====
+Now let's see how much we achieved...
+
+* _blue_Strong scaling_: as we add processes, how do we fare?
+* _blue_Weak scaling_: as we add ''both'' processes and work?
+
+<[code][language=sh]
+$ mpicc -O3 -o integral_par.x integral_par.cxx -L ./mylib -lmymath
+$ time -a -p mpirun -np 2 ./integral_seq.x 10000
+LOREM IPSUM LOREM IPSUM LOREM IPSUM
+LOREM IPSUM LOREM IPSUM LOREM IPSUM
+LOREM IPSUM LOREM IPSUM LOREM IPSUM
+[code]>
+
+==== Parallel performance: results ====
+Is there a performance problem? 
+
+!THIS GRAPH IS WRONG!
+<<<integrand-labelled.pdf,height=0.7\textheight>>>
+
+==== How does performance analysis work? ====
+<[columns][T]
+[[[0.6\textwidth]]]
+_ballblue_How to collect data?_
+* _blue_Instrumentation:_
+** Insert timers \& counters\\ in the code
+** Requires source or binary processing
+* _blue_Sampling:_
+** Interrupt \& check the program\\ at regular intervals
+** Introduces statistical error
+[[[0.55\textwidth]]]
+_ballblue_What kind of data?_
+* _blue_Profile:_
+** Summary information only
+** Relatively small file
+* _blue_Trace:_
+** Detailed recording\\during the run
+** Potentially huge file
+** Profile can be restored
+[columns]>
+-- 2\baselineskip --
+<[center]
+''Allinea MAP'' does _blue_tracing_ by _blue_sampling_.
+[center]>
+
+
+==== Prepare for profiling ====
+To prepare for profiling, one needs:
+* Compile with full optimization
+* Generate debugging symbols
+* Link with system libs dynamically
+** Usually the default
+** Notable exception: Cray
+* On Flux: load @ddt@ module
+-- 1.5\baselineskip --
+<[code][language=sh,emph={g,ddt}]
+$ mpicc -g -O3 -o integral_par.x \
+        integral_par.cxx -L ./mylib -lmymath
+$ module add ddt
+[code]>
+
+==== Running Map: simple way (demo) ====
+# Get interactive access to a compute node
+# Change to your working directory
+# Optionally, set ''sampling interval''
+# Run as you would, prefixed by @_blue_map_@
+
+<[code][language=sh,emph={I,X,map,ALLINEA_SAMPLER_INTERVAL}]
+$ qsub -V -I -X -q flux -l qos=flux,nproc=12 \
+        -l walltime=10:0:0 -A #(\emph{account\_flux})
+$ cd $PBS_O_WORKDIR
+$ export ALLINEA_SAMPLER_INTERVAL=5
+$ map mpirun -np 12 ./integral_par.x 10000
+[code]>
+
+_otherblue_Caution_:
+* Too small interval: large overhead!
+* Too large interval: not enough samples!
+
+==== Running Map: other options ====
+What if you can not or would not run GUI? 
+* Have slow or non-existing X connection to compute nodes
+* Do not want to run interactively
+Use @_blue_-profile_@ option.
+<[code][language=sh,emph={map,profile}]
 #PBS -V
+#PBS -q flux -l qos=flux -A #(\emph{account\_flux})
+#PBS -l nproc=12,walltime=10:0:0
+cd $PBS_O_WORKDIR
+export ALLINEA_SAMPLER_INTERVAL=5
+map -profile mpirun -np 12 ./integral_par.x 10000
+[code]>
+This will create a  @_blue_*.map_@ file. 
+Then run from the login node:
+<[code][language=sh,emph={map}]
+$ ma#()p integral_par_even_12p_*.map
+[code]>
+
+==== If you are submitting to a Flux queue... ====
+<[columns][T]
+[[[0.51\textwidth]]]
+# Run @map@ from the login node:\\ {\small @\$\ map mpirun -np 12 $\backslash$\\\ \ ./integral\_par.x 10000@}
+# Set number of processes
+# Check '''Submit to queue'''
+# Click '''Configure...'''
+# Load a proper ''submission template file'' (see next page)
+# Click '''OK'''
+# Click '''Run'''
+[[[0.49\textwidth]]]
+<<<allinea-map-run-menu.png,width=1.15\textwidth>>>
+[columns]>
+
+==== Submission template for Flux ====
+<[code][language=sh]
+#PBS -V
+#PBS -l walltime=WALL_CLOCK_LIMIT_TAG
+#PBS -l nodes=NUM_NODES_TAG:ppn=PROCS_PER_NODE_TAG
+#PBS -q QUEUE_TAG -l qos=flux -A #(\emph{account\_flux})
 #PBS -o PROGRAM_TAG-allinea.stdout
 #PBS -e PROGRAM_TAG-allinea.stderr
 
 cd $PBS_O_WORKDIR
 AUTO_LAUNCH_TAG
 [code]>
+
+
+==== Time for a live demo!!! ====
+
+!SCREENSHOT HERE!
+
+* Most of the time is spent in @MPI@
+* As the run progresses, ''even more'' time is spent in @MPI@
+* Problem: some processes spend more time \\ in calculating the integrand $f(x)$!
+* It's called ``_otherblue_Load Imbalance_''
+
+Possible solutions:
+
+* Distribute work unevenly (but how?)
+* Implement dynamic load balancing
+
+==== Dynamic load balancing ====
+\centering{Manager-Workers approach:}
+-- 1\baselineskip --
+<[columns][T]
+[[[0.5\textwidth]]]
+\centering{Manager}
+# Listen to all workers
+# Worker sent @READY@ ?\\ send @GO@ with a job chunk
+# Worker sent @DONE@? \\ add result to the sum
+# No more job chunks? \\ send @STOP@ to the worker
+# No more workers? \\ we are done
+[[[0.5\textwidth]]]
+\centering{Worker}
+# Send @READY@ to the Manager
+# Listen to the Manager
+# Manager sent @GO@ ?
+#* Get job chunk
+#* Do the calculation
+#* Send @DONE@ with result\\ to the Manager
+#* Go to (1)
+# Manager sent @STOP@? \\ exit.
+[columns]>
+
+==== Strong scaling graph. ====
+==== Map demo and screenshot. ====
 
 ==== The problem and the first approach ====
 
@@ -77,30 +237,13 @@ Analytic solution to cross-check: $ I(a,b) = 4(b^{1/4} - a^{1/4}) $
 *<2> Caveat: integrand takes more time to compute at low $x$\!
 [columns]>
 
-==== Possible solutions ====
 
-* Allocate smaller intervals to ranks near $x=0$ \\ Try it!
-* Implement dynamic load balancing
 
-==== Dynamic load balancing ====
-\centering{Master-workers approach:}
--- 1\baselineskip --
-<[columns]
-[[[0.5\textwidth]]]
-\centering{Master}
-# Listen to all workers
-# Worker sent @READY@ ?\\ send @GO@ with a job chunk
-# Worker sent @DONE@? \\ add result to the sum
-# No more chunks? \\ send @STOP@ to the worker
-# No more workers? \\ we are done
-[[[0.5\textwidth]]]
-\centering{Worker}
-# Listen to the master
-# Master sent @GO@ ?\\ Get job chunk \\ Run the calculation \\ Send @READY@ to master
-# Master sent @STOP@? \\ exit.
--- 2\baselineskip --
-[columns]>
 
 ==== Dynamic load balancing ====
 Try various chunk sizes, various number of processes. \\
 Where are the bottlenecks?
+
+
+==== (Alternative: give smaller chunks to low X. Scalability. Profile.) ====
+
