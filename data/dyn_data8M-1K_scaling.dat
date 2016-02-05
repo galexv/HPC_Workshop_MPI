@@ -1,0 +1,9 @@
+##Dynamic with 8M points, 1K block
+# NP wall_clock_time cpu_time
+2 18.19 34.07
+3 9.69 25.63
+5 5.46 21.39
+7 4.04 20.00
+9 3.92 24.35
+12 4.07 33.73
+13 3.99 19.37

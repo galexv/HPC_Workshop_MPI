@@ -1,0 +1,8 @@
+# Sample recording script
+
+(f=dyn_data8M-2K_scaling.dat; \
+ for p in 2 3 5 7 9 12 13; do \
+ echo -n "$p " >>$f; \
+ /usr/bin/time -f "%e %U" -o $f --append \
+       mpirun -np $p ./integral_dyn.x 8000000 2000; \
+ done)
