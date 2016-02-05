@@ -11,6 +11,6 @@ libmymath.a:	mymath.cxx mymath.hpp
 	$(CXX) $(CXXFLAGS) -o mymath.o -c mymath.cxx
 	$(AR) rs $@ mymath.o
 
-.PHONY clean
+.PHONY: clean
 clean:
 	rm -f *.a *.o
