@@ -26,18 +26,26 @@ The problem:
 
 
 ==== Problem size behavior: how to measure. ====
-Do we even need to parallelize? How fast does the execution time grow with the size of the problem?
-<[code][language=sh]
-$ gcc -O3 -o integral_seq.x integral_seq.cxx -L./mylib -lmymath
-$ time -a -p ./integral_seq.x 10000
-LOREM IPSUM LOREM IPSUM LOREM IPSUM
-LOREM IPSUM LOREM IPSUM LOREM IPSUM
-LOREM IPSUM LOREM IPSUM LOREM IPSUM
+Do we even need to parallelize? 
+<[code][language=sh,emph={time}]
+# Compilation:
+$ gcc -O3 -o integral_seq.x integral_seq.cxx\
+      -L./mylib -lmymath
+# Timed runs:
+$ time -p ./integral_seq.x #(\textcolor{blue}{1000000})
+Result=3.775045 Exact=3.775063 Difference=-0.000019
+real #(\textcolor{blue}{2.12})
+$ time -p ./integral_seq.x #(\textcolor{blue}{2000000})
+Result=3.775058 Exact=3.775063 Difference=-0.000005
+real #(\textcolor{blue}{4.28})
+$ time -p ./integral_seq.x #(\textcolor{blue}{8000000})
+Result=3.775062 Exact=3.775063 Difference=-0.000001
+real #(\textcolor{blue}{17.61})
 [code]>
-
-==== Problem size behavior. Graph. ====
-!THIS GRAPH IS WRONG!
-<<<integrand-labelled.pdf,height=0.7\textheight>>>
+-- -0.5\baselineskip --
+The time grows linearly with the problems size.
+Acceptable accuracy at 8M points.
+Can we speed it up?
 
 ==== Parallellization: domain decomposition. ====
 
@@ -54,20 +62,55 @@ Approach:
 # $ \displaystyle F(a,b) = \sum_{k} F(x_{k},x_{k+1}) $
 [columns]>
 
-==== ?? CODE ?? ====
+==== A sketch of the parallel code ====
+<[code][language=c++,basicstyle=\tiny\ttfamily,basicwidth=0.3em]
+  MPI_Init(&argc, &argv);
 
+  int rank, nprocs;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+
+  // ...Get total number of steps, broadcast...
+
+  // Each rank figures out its integration limits and number of steps
+  unsigned long my_stepbase, my_nsteps;
+  get_steps(nsteps_all, nprocs, rank,  &my_stepbase, &my_nsteps);
+  
+  const double per_step=(global_b-global_a)/nsteps_all;
+  const double x1=global_a + my_stepbase*per_step;
+  const double x2=x1 + my_nsteps*per_step;
+
+  // Compute my own part of the integral
+  double my_y=integral(integrand, my_nsteps, x1, x2);
+
+  // Sum all numbers on master
+  double y=0;
+  MPI_Reduce(&my_y, &y, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  // ... print results ...
+  MPI_Barrier(MPI_COMM_WORLD);
+  // Here we could start another computation.
+  MPI_Finalize();
+[code]>
 ==== Parallel performance: how to measure. ====
 Now let's see how much we achieved...
 
 * _blue_Strong scaling_: as we add processes, how do we fare?
 * _blue_Weak scaling_: as we add ''both'' processes and work?
 
-<[code][language=sh]
-$ mpicc -O3 -o integral_par.x integral_par.cxx -L ./mylib -lmymath
-$ time -a -p mpirun -np 2 ./integral_seq.x 10000
-LOREM IPSUM LOREM IPSUM LOREM IPSUM
-LOREM IPSUM LOREM IPSUM LOREM IPSUM
-LOREM IPSUM LOREM IPSUM LOREM IPSUM
+<[code][language=sh,emph={time}]
+$ mpicc -O3 -o integral_par.x integral_par.cxx \
+        -L./mylib -lmymath
+$ time -p mpirun -np 1 ./integral_par.x 8000000
+Result=3.775062 Exact=3.775063 Difference=-0.000001
+real #(\textcolor{red}{17.23})
+user #(\textcolor{purple}{17.08})
+sys 0.02
+$ time -p mpirun -np 2 ./integral_par.x 8000000
+Result=3.775062 Exact=3.775063 Difference=-0.000001
+real #(\textcolor{red}{17.24})
+user #(\textcolor{purple}{31.98})
+sys 0.05
 [code]>
 
 ==== Parallel performance: results ====
@@ -156,8 +199,8 @@ $ ma#()p integral_par_even_12p_*.map
 
 ==== If you are submitting to a Flux queue... ====
 <[columns][T]
-[[[0.51\textwidth]]]
-# Run @map@ from the login node:\\ {\small @\$\ map mpirun -np 12 $\backslash$\\\ \ ./integral\_par.x 10000@}
+[[[0.52\textwidth]]]
+# Run @map@ from the login node:\\ \hspace{-1.8em}{\small @\$\ map ./integral\_par.x 8000000@}
 # Set number of processes
 # Check '''Submit to queue'''
 # Click '''Configure...'''
