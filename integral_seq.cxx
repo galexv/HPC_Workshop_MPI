@@ -6,7 +6,8 @@
 int main(int argc, char** argv)
 {
   unsigned long int n;
-  if (argc!=2 || sscanf(argv[1],"%lu",&n)!=1)  return 1;
+  if (argc!=2 || sscanf(argv[1],"%lu",&n)!=1) {
+    fprintf(stderr,"Usage:\n%s integration_steps\n\n\n",argv[0]);
 
   // Integration limits.
   const double global_a=1E-5;
