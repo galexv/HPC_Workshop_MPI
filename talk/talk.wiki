@@ -12,18 +12,48 @@ lstset={escapeinside={\#(}{)},style=basic,emphstyle=\color{otherblue},basicstyle
 
 ==== Problem: Calculation of a definite integral.  ====
 
-<[columns]
+<[columns][T]
 [[[0.25\textwidth]]]
 <<<integrand-labelled.pdf,height=0.9\textheight>>>
 [[[0.75\textwidth]]]
 The problem:
-* We need to compute: \\ $ \displaystyle F(a,b) = \int_a^b f(x) dx $ \\ Where $ f(x) $ is some (presumably\\ ``slow to compute'') function.\\[2\baselineskip]
+* We need to compute: \\ $ \displaystyle F(a,b) = \int_a^b f(x) dx $ \\ Where $ f(x) $ is some (presumably\\ ``slow to compute'') function.\\[0.8\baselineskip]
 * We use this approach:
 *# Split $[a,b]$ by points {$\{x_{1}, x_{2}, \ldots, x_{k}\}$}
 *# $ \displaystyle F(a,b) = \sum_{k} f(\frac{x_{k}+x_{k+1}}{2}) (x_{k+1}-x_{k}) $
+* The integrand $f(x)$ and the integration routine are hidden inside a library.
 
 [columns]>
 
+==== Sequential program code ====
+<[code][language=C++,basicstyle=\tiny\ttfamily]
+#include <stdio.h>
+#include <math.h>
+
+// Declare integrand() and integral() from ``mymath`` library
+#include "mylib/mymath.hpp"
+
+int main(int argc, char** argv)
+{
+  unsigned long int n;
+  if (argc!=2 || sscanf(argv\[1\],"%lu",&n)!=1) {
+    fprintf(stderr,"Usage:\n%s integration_steps\n\n\n",argv\[0\]);
+    return 1;
+  }
+
+  // Integration limits.
+  const double global_a=1E-5;
+  const double global_b=1;
+
+  // Perform integration
+  const double y=integral(integrand, n, global_a, global_b);
+
+  const double y_exact=4*(pow(global_b,0.25)-pow(global_a,0.25));
+  printf("Result=%lf Exact=%lf Difference=%lf\n", y, y_exact, y-y_exact);
+
+  return 0;
+}
+[code]>
 
 ==== Problem size behavior: how to measure. ====
 Do we even need to parallelize? 
@@ -51,7 +81,7 @@ Can we speed it up?
 
 Approach: 
 * Split $[a,b]$ into several domains;
-* Compute integrals independently.
+* Compute integrals _blue_independently_.
 <[columns]
 [[[0.4\textwidth]]]
 <<<integrand-edited.pdf,height=0.5\textheight>>>
@@ -60,6 +90,7 @@ Approach:
 # Assign a process to each \\ domain $[x_{k}, x_{k+1}]$
 # Let each process \\ compute $ F(x_{k},x_{k+1}) $
 # $ \displaystyle F(a,b) = \sum_{k} F(x_{k},x_{k+1}) $
+_ballblue_``Embarassingly parallel'' problem,\\ high speedup is expected._
 [columns]>
 
 ==== A sketch of the parallel code ====
@@ -70,7 +101,8 @@ Approach:
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
-  // ...Get total number of steps, broadcast...
+  // ...Get total number of steps, broadcast it...
+  // ...
 
   // Each rank figures out its integration limits and number of steps
   unsigned long my_stepbase, my_nsteps;
@@ -88,6 +120,8 @@ Approach:
   MPI_Reduce(&my_y, &y, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
   // ... print results ...
+  // ...
+
   MPI_Barrier(MPI_COMM_WORLD);
   // Here we could start another computation.
   MPI_Finalize();
@@ -101,12 +135,12 @@ Now let's see how much we achieved...
 <[code][language=sh,emph={time}]
 $ mpicc -O3 -o integral_par.x integral_par.cxx \
         -L./mylib -lmymath
-$ time -p mpirun -np 1 ./integral_par.x 8000000
+$ time -p mpirun -np #(\textcolor{blue}{1}) ./integral_par.x 8000000
 Result=3.775062 Exact=3.775063 Difference=-0.000001
 real #(\textcolor{red}{17.23})
 user #(\textcolor{purple}{17.08})
 sys 0.02
-$ time -p mpirun -np 2 ./integral_par.x 8000000
+$ time -p mpirun -np #(\textcolor{blue}{2}) ./integral_par.x 8000000
 Result=3.775062 Exact=3.775063 Difference=-0.000001
 real #(\textcolor{red}{17.24})
 user #(\textcolor{purple}{31.98})
@@ -114,10 +148,18 @@ sys 0.05
 [code]>
 
 ==== Parallel performance: results ====
-Is there a performance problem? 
-
-!THIS GRAPH IS WRONG!
-<<<integrand-labelled.pdf,height=0.7\textheight>>>
+\centering{'''Is there a performance problem?'''}
+-- \baselineskip --
+<[columns]
+[[[0.5\textwidth]]]
+<<<par_scaling.pdf,height=0.7\textheight>>>
+[[[0.5\textwidth]]]
+* Relative speedup: $s(p)=\frac{(\mathrm{time\ with}\ 1\ \mathrm{process})}{(\mathrm{time\ with}\ p\ \mathrm{processes})}$
+* Ideal relative speedup: $s_{\mathrm{ideal}}(p) = p$
+* Our speedup is \\!25\% on 12 nodes!\!
+* I'd call it {``}''dismal''{\,''}.\\We '''do''' have a problem!
+* Why? How to figure it out?
+[columns]>
 
 ==== How does performance analysis work? ====
 <[columns][T]
@@ -146,7 +188,7 @@ _ballblue_What kind of data?_
 
 
 ==== Prepare for profiling ====
-To prepare for profiling, one needs:
+To prepare for profiling/tracing, one needs to:
 * Compile with full optimization
 * Generate debugging symbols
 * Link with system libs dynamically
@@ -177,11 +219,12 @@ $ map mpirun -np 12 ./integral_par.x 10000
 _otherblue_Caution_:
 * Too small interval: large overhead!
 * Too large interval: not enough samples!
+* ''Allinea'' recommends at least 1000 samples/process
 
 ==== Running Map: other options ====
-What if you can not or would not run GUI? 
-* Have slow or non-existing X connection to compute nodes
-* Do not want to run interactively
+What if you can not or would not run a GUI? 
+* Have slow or non-existing X connection to compute nodes.
+* Do not want to wait for interactive session.
 Use @_blue_-profile_@ option.
 <[code][language=sh,emph={map,profile}]
 #PBS -V
@@ -189,7 +232,7 @@ Use @_blue_-profile_@ option.
 #PBS -l nproc=12,walltime=10:0:0
 cd $PBS_O_WORKDIR
 export ALLINEA_SAMPLER_INTERVAL=5
-map -profile mpirun -np 12 ./integral_par.x 10000
+map -profile mpirun -np 12 ./integral_par.x 8000000
 [code]>
 This will create a  @_blue_*.map_@ file. 
 Then run from the login node:
@@ -227,66 +270,117 @@ AUTO_LAUNCH_TAG
 
 ==== Time for a live demo!!! ====
 
-!SCREENSHOT HERE!
-
-* Most of the time is spent in @MPI@
-* As the run progresses, ''even more'' time is spent in @MPI@
-* Problem: some processes spend more time \\ in calculating the integrand $f(x)$!
-* It's called ``_otherblue_Load Imbalance_''
-
+<[columns]
+[[[0.56\textwidth]]]
+* Most of the time is spent in @MPI@;
+* As run progresses, ''even more'' time is spent in @MPI@;
+* Problem: some processes spend more time computing $f(x)$\\ then others!
+* It's called ``_otherblue_Load Imbalance_''.
+[[[0.6\textwidth]]]
+<<<Allinea_map_par-12p.png,width=1\textwidth>>>
+[columns]>
+-- 0.5\baselineskip --
 Possible solutions:
 
 * Distribute work unevenly (but how?)
-* Implement dynamic load balancing
+* Implement ''_ballblue_Dynamic Load Balancing_''.
 
 ==== Dynamic load balancing ====
-\centering{Manager-Workers approach:}
--- 1\baselineskip --
+_ballblue_Idea:_ If a process has nothing to do, make it to do something.
+-- 0.5\baselineskip --
+\centering{'''Manager-Workers approach:'''}
+-- 0.2\baselineskip --
 <[columns][T]
 [[[0.5\textwidth]]]
-\centering{Manager}
+\centering{_ballblue_Manager_}
 # Listen to all workers
-# Worker sent @READY@ ?\\ send @GO@ with a job chunk
-# Worker sent @DONE@? \\ add result to the sum
-# No more job chunks? \\ send @STOP@ to the worker
-# No more workers? \\ we are done
+# Worker sent @_blue_READY_@ ?
+#* send @_blue_GO_@ with a job chunk
+# Worker sent @_blue_DONE_@?
+#* add result to the sum
+# No more job chunks?
+#* send @_blue_STOP_@ to the worker
+# No more workers?
+#* we are done!
+#* Otherwise, go to (1)
 [[[0.5\textwidth]]]
-\centering{Worker}
-# Send @READY@ to the Manager
+\centering{_ballblue_Worker_}
+# Send @_blue_READY_@ to the Manager
 # Listen to the Manager
-# Manager sent @GO@ ?
+# Manager sent @_blue_GO_@ ?
 #* Get job chunk
 #* Do the calculation
-#* Send @DONE@ with result\\ to the Manager
+#* Send @_blue_DONE_@ with result\\ to the Manager
 #* Go to (1)
-# Manager sent @STOP@? \\ exit.
+# Manager sent @_blue_STOP_@?
+#* exit.
 [columns]>
 
-==== Strong scaling graph. ====
-==== Map demo and screenshot. ====
+==== Dynamic Load Balancing: large block size (2500) ====
+Run with:\\@\$ map mpirun -np 12 ./dyn\_integral.x 8000000 !2500! @
+-- \baselineskip --
+<[columns][T]
+[[[0.68\textwidth]]]
+<<<allinea_map_dyn_block2500.png,height=0.65\textheight>>>
+[[[0.47\textwidth]]]
+* CPU occupied till half-way
+* Spikes in MPI use: Manager receiving data
+* Looks like the last worker was holding everyone
+* Other workers:\\''_babyblue_worker starvation_''\\(no work to do)
+[columns]>
 
-==== The problem and the first approach ====
+==== Dynamic Load Balancing: small block size (2) ====
+Run with:\\@\$ map mpirun -np 12 ./dyn\_integral.x 8000000 !2! @
+-- \baselineskip --
+<[columns][T]
+[[[0.65\textwidth]]]
+<<<allinea_map_dyn_block2.png,height=0.65\textheight>>>
+[[[0.47\textwidth]]]
+* Brief useful CPU work, \\ then all time is in @MPI@
+* Just moving data around:
+** Workers receiving data
+** 8\% (!1/12!) of time: Manager sending data.
+* Very low ''_blue_computation/\\communication ratio_''.
+[columns]>
 
-$$ I(a,b) = \int_a^b x^{-3/4} dx $$
+==== Dynamic Load Balancing: good block size (100) ====
+Run with:\\@\$ map mpirun -np 12 ./dyn\_integral.x 8000000 !100! @
+-- \baselineskip --
+<[columns][T]
+[[[0.65\textwidth]]]
+<<<allinea_map_dyn_block100.png,height=0.62\textheight>>>
+[[[0.5\textwidth]]]
+* _blue_80\%_ time CPU is busy!
+* 8\% (!1/12!) of time: Manager work.
+* Mostly @MPI@ by the\\ end of the run.
+* OK computation/\\communication ratio.
+* Still room for improvement!
+[columns]>
 
-Analytic solution to cross-check: $ I(a,b) = 4(b^{1/4} - a^{1/4}) $
-
+==== Dynamic Load Balancing: Strong scaling graph. ====
+\centering{'''How does it look now?'''}
 <[columns]
-[[[0.5\textwidth]]]
-<<<integrand-edited.pdf,height=0.5\textheight>>>
-[[[0.5\textwidth]]]
-* Split $[a,b]$ equally between workers
-* { $ I(a,b) = \sum_{k} I(x_{k},x_{k+1}) $ }
-*<2> Caveat: integrand takes more time to compute at low $x$\!
+[[[0.6\textwidth]]]
+<<<dyn_scaling.pdf,height=0.8\textheight>>>
+[[[0.55\textwidth]]]
+Conclusions:
+* Block size does affect performance.
+* Block size 100 grows\\ up to node size (12).
+* Too small block:\\ @MPI@ communication overhead.
+* Too large block:\\ workers starvation.
 [columns]>
 
-
-
-
-==== Dynamic load balancing ====
-Try various chunk sizes, various number of processes. \\
-Where are the bottlenecks?
-
-
-==== (Alternative: give smaller chunks to low X. Scalability. Profile.) ====
+==== Concluding slide ====
+-- -1\baselineskip --
+\centering{'''Take-home message'''}
+\small
+* Once you made your program parallel,\\ do simple scaling experiments.
+* If scaling is bad, use profiling tools to understand why.
+* ''Allinea Map'' is available for all Flux users.
+* ''Map'' can analyze not only parallel, but single-node\\ and @OpenMP@ performance. (Can show something if time permits!)
+* If you need any advise and/or help with your parallel programming,\\ARC provides _blue_free consulting service_
+** Just send a mail to HPC support...
+** ...or directly to: @"Alexander Gaenko"@ \url{<galexv@umich.edu>}
+-- 0.5\baselineskip --
+\normalsize\centering{''Thank you for your attention!''}
 
