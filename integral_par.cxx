@@ -3,63 +3,7 @@
 
 #include <mpi.h>
 
-/// Computes exp(x)
-double fancy_exp(double x)
-{
-  double c=1;
-  double s=c;
-  const double thresh=2.E-16;
-
-  for (unsigned long k=1; fabs(c)>thresh; ++k) {
-    c *= x/k;
-    s += c;
-  }
-  return s;
-}
-
-/// Computes log(x)
-double fancy_log(double x)
-{
-  double c=x-1;
-  double s=c;
-  const double thresh=2.E-10;
-
-  for (unsigned long k=0; fabs(c)>thresh; ++k) {
-    c *= (1-x)*(k+1)/(k+2);
-    s += c;
-  }
-  return s;
-}
-
-/// Computes pow(x,y)
-double fancy_pow(double x, double y)
-{
-  double r=fancy_exp(y*fancy_log(x));
-  return r;
-}
-
-
-/// Computes x**(-0.75)
-double integrand(const double x)
-{
-  return fancy_pow(x,-0.75);
-}
-
-/// Computes \int_x1^x2 t^(-0.75) dt
-double integral(const unsigned long npoints, const double x1, const double x2)
-{
-  double s=0;
-  const double h=(x2-x1)/npoints;
-  // #pragma omp parallel for schedule(runtime) reduction(+:s)  
-  for (unsigned long i=0; i<npoints; ++i) {
-    const double t=x1+(i+0.5)*h;
-    const double y=integrand(t);
-    s+=y;
-  }
-  s*=h;
-  return s;
-}
-
+#include "mylib/mymath.hpp"
 
 /// Calculates the fair share of `nsteps_all` steps between `nprocs` processes for rank `rank`
 void get_steps(unsigned long nsteps_all, int nprocs, unsigned int rank,
@@ -95,11 +39,6 @@ int main(int argc, char** argv)
       MPI_Abort(MPI_COMM_WORLD, 1);
       return 1;
     }
-
-    // Sanity check for reasonable convergence thresholds
-    double x=0.01;
-    printf("Sanity check: logarithm accuracy at %lf is %lf\n",
-           x, fabs(log(x)-fancy_log(x)));
   }
   MPI_Bcast(&nsteps_all, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
@@ -118,7 +57,7 @@ int main(int argc, char** argv)
   // fprintf(stderr,"DEBUG: Rank %u: %lu steps from %lf to %lf\n", rank, my_nsteps, x1, x2);
 
   // Compute my own part of the integral
-  double my_y=integral(my_nsteps, x1, x2);
+  double my_y=integral(integrand, my_nsteps, x1, x2);
   // fprintf(stderr,"DEBUG: Rank %u: done, result=%lf\n", rank, my_y);
 
   // Sum all numbers on master
