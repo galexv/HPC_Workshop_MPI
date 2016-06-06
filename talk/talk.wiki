@@ -319,11 +319,11 @@ _ballblue_Idea:_ If a process has nothing to do, make it to do something.
 ==== Dynamic load balancing ====
 <[columns][T]
 [[[0.45\textwidth]]]
-<<<master_flow.pdf,height=0.7\textheight>>>
+<<<master_flow.pdf,width=1\textwidth>>>
 [[[0.1\textwidth]]]
 
 [[[0.45\textwidth]]]
-<<<worker_flow.pdf,height=0.6\textheight>>>
+<<<worker_flow.pdf,width=1\textwidth>>>
 [columns]>
 
 
