@@ -316,6 +316,17 @@ _ballblue_Idea:_ If a process has nothing to do, make it to do something.
 #* exit.
 [columns]>
 
+==== Dynamic load balancing ====
+<[columns][T]
+[[[0.45\textwidth]]]
+<<<master_flow.pdf,height=0.7\textheight>>>
+[[[0.1\textwidth]]]
+
+[[[0.45\textwidth]]]
+<<<worker_flow.pdf,height=0.6\textheight>>>
+[columns]>
+
+
 ==== Dynamic Load Balancing: Worker code ====
 <[code][language=c++,basicstyle=\tiny\ttfamily,basicwidth=0.3em]
 void do_worker(int manager, int rank)
